@@ -1,0 +1,20 @@
+#!/bin/bash
+option=$1
+case "$option" in
+    "install")
+        kpackagetool5 -t Plasma/Applet --install ./
+        ;;
+    "remove")
+        kpackagetool5 -t Plasma/Applet --remove org.kde.textresourcemonitor
+        ;;
+    "upgrade")
+        kpackagetool5 -t Plasma/Applet --remove org.kde.textresourcemonitor
+        kpackagetool5 -t Plasma/Applet --install ./
+        ;;
+    "test")
+        plasmoidviewer --applet ./
+        ;;
+    *)
+        echo "Invalid Option"
+        echo "Try - installer [install | remove | upgrade]"
+esac
