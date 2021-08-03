@@ -17,24 +17,30 @@ Item {
     // Text Metrics
     TextMetrics {
         id: cpuMetrics
-        text: "CPU: 000%"
+        text: " 0%"
         font.pixelSize: dispPixelSize 
     }
 
     TextMetrics {
         id: ramMetrics
-        text: "RAM: 00.00 MB / 00.00 MB"
+        text: " 00.0 MB / 00.0 MB"
         font.pixelSize: dispPixelSize 
     }
 
     TextMetrics {
         id: swapMetrics
-        text: "SWAP: 00.00 MB / 00.00 MB"
+        text: " 00.0 MB / 00.0 MB"
         font.pixelSize: dispPixelSize 
     }
 
+    TextMetrics {
+        id: netMetrics
+        text: " ↓ 00.00 MiB/s    ↑ 00.00 MiB/s "
+        font.pixelSize: dispPixelSize
+    }
+
     // Set Layout 
-    Layout.minimumWidth: cpuMetrics.width + ramMetrics.width + swapMetrics.width + 25
+    Layout.minimumWidth: cpuMetrics.width + ramMetrics.width + swapMetrics.width + netMetrics.width + (cpuMetrics.height * 4) + 55
     Layout.preferredWidth: Layout.minimumWidth
 
     // Data Source
@@ -42,7 +48,7 @@ Item {
         // Id for Resources
         id: res
         engine: "systemmonitor"
-        interval: 500
+        interval: 800
 
         // Set Properties for Sources
         property string cpuLoad : "cpu/system/TotalLoad"
@@ -52,6 +58,9 @@ Item {
         property string swapFree : "mem/swap/free"
         property string swapUsed : "mem/swap/used"
 
+        // Property for Network Speed
+        property var netSpeeds : [];
+
         property int totalWidth: 0
 
         // Usages
@@ -59,6 +68,24 @@ Item {
 
         // Connect all Data sources
         connectedSources: [cpuLoad, ramApp, ramUsed, ramFree, swapUsed, swapFree]
+
+        // Connect Network Sources
+        onSourceAdded: {
+            var match = source.match(/^network\/interfaces\/(\w+)\/(receiver|transmitter)\/data$/)
+
+            if(match) {
+                connectSource(source)
+            }
+        }
+
+        // Disconnect Network Source
+        onSourceRemoved: {
+            var match = source.match(/^network\/interfaces\/(\w+)\/(receiver|transmitter)\/data$/)
+
+            if(match) {
+                disconnectSource(source)
+            }
+        }
 
         // Getting Data
         onNewData: {
@@ -72,7 +99,7 @@ Item {
             else if (sourceName === cpuLoad){
                 // Update CPU Date
                 cpuData.text = cpuMetrics.text;
-                cpuData.text = 'CPU: ' + Math.round(data.value) + '%';
+                cpuData.text = ' ' + Math.round(data.value) + '%';
             }
 
             // Ram Used
@@ -101,7 +128,7 @@ Item {
                     var ramPerc = Math.round(appMemory / totalMemory * 100) + '%';
 
                     // Update Data
-                    ramData.text = 'RAM: ' + ramMem + ' / ' + totalRamMem;
+                    ramData.text = ' ' + ramMem + ' / ' + totalRamMem;
                 } else {
 
                     ramData.text = ramMetrics.text;
@@ -131,21 +158,81 @@ Item {
                     var swapPerc = Math.round(usage['SWAPUSED'] / totalSwap * 100) + '%';
 
                     // Swap Display
-                    swapData.text = 'SWAP: ' + swapMem + ' / ' + totalSwapMem;
+                    swapData.text = ' ' + swapMem + ' / ' + totalSwapMem;
                 } else {
                     swapData.text = swapMetrics.text;
+                }
+            }
+
+            // Network Data
+            else {
+                var matched = sourceName.match(/^network\/interfaces\/(\w+)\/(receiver|transmitter)\/data$/)
+                var dataChanged = false
+
+                var interfaceName = matched[1]
+
+                // Only WLP and ETH interfaces
+                if (interfaceName.substr(0, 3) === 'wlp' || interfaceName.substr(0, 3)[0] === 'eth') {
+
+                    // If interface does not exist, then add empty data
+                    if (netSpeeds[ interfaceName ] === undefined) {
+                        netSpeeds[ interfaceName ] = {up: 0, down: 0}
+                    }
+
+                    // Save speed date in temp variable
+                    var tempSpeeds = netSpeeds
+                    var speedValue = parseFloat(data.value)
+
+                    if (matched[2] === 'receiver') {
+                        tempSpeeds[interfaceName].down = speedValue
+                        dataChanged = true
+
+                    } else if (matched[2] === 'transmitter') {
+                        tempSpeeds[interfaceName].up = speedValue
+                        dataChanged = true
+                    }
+                }
+
+                // Update Data if we have any new data
+                if (dataChanged) {
+                    // Set Network speed form Temp Speed
+                    netSpeeds = tempSpeeds
+
+                    var down = parseFloat(0)
+                    var up = parseFloat(0)
+
+                    // Loop over each interface and sum the speed
+                    for (var inf in netSpeeds) {
+                        down += netSpeeds[inf].down
+                        up += netSpeeds[inf].up
+                    }
+
+                    // Update widget text
+                    var output = ' ↓ ' + convertNetworkSpeed(down) + ' ' + convertNetworkUnit(down) + '  ↑ ' + convertNetworkSpeed(up) + ' ' + convertNetworkUnit(up)
+                    netData.text = output
                 }
             }
         }
     }
 
     // Display Contenct
-
     Text {
         id: leftPad
         height: parent.height
         horizontalAlignment: Text.AlignLeft
         verticalAlignment: Text.AlignVCenter
+    }
+
+    Image {
+        id: cpuImg
+        source: 'cpu.svg'
+        height: parent.height * 0.8
+        width: parent.height * 0.8
+        anchors.left: leftPad.right
+        anchors.leftMargin: 5
+        anchors.verticalCenter: parent.verticalCenter
+        verticalAlignment: Image.AlignVCenter
+        horizontalAlignment: Image.AlignLeft
     }
 
     Text {
@@ -155,10 +242,22 @@ Item {
         width: cpuMetrics.width
         color: theme.textColor
         horizontalAlignment: Text.AlignLeft
-        anchors.left: leftPad.right
+        anchors.left: cpuImg.right
         anchors.leftMargin: 5
         verticalAlignment: Text.AlignVCenter
         font.pixelSize: dispPixelSize 
+    }
+
+    Image {
+        id: ramImg
+        source: 'ram.svg'
+        height: parent.height * 0.8
+        width: parent.height * 0.8
+        anchors.left: cpuData.right
+        anchors.leftMargin: 20
+        anchors.verticalCenter: parent.verticalCenter
+        verticalAlignment: Image.AlignVCenter
+        horizontalAlignment: Image.AlignLeft
     }
 
     Text {
@@ -168,10 +267,22 @@ Item {
         width: ramMetrics.width
         color: theme.textColor
         horizontalAlignment: Text.AlignLeft
-        anchors.left: cpuData.right
-        anchors.leftMargin: 10
+        anchors.left: ramImg.right
+        anchors.leftMargin: 5
         verticalAlignment: Text.AlignVCenter
         font.pixelSize: dispPixelSize 
+    }
+
+    Image {
+        id: swapImg
+        source: 'swap.svg'
+        height: parent.height * 0.8
+        width: parent.height * 0.8
+        anchors.left: ramData.right
+        anchors.leftMargin: 20
+        anchors.verticalCenter: parent.verticalCenter
+        verticalAlignment: Image.AlignVCenter
+        horizontalAlignment: Image.AlignLeft
     }
 
     Text {
@@ -181,9 +292,64 @@ Item {
         width: swapMetrics.width
         color: theme.textColor
         horizontalAlignment: Text.AlignLeft
-        anchors.left: ramData.right
-        anchors.leftMargin: 10
+        anchors.left: swapImg.right
+        anchors.leftMargin: 5
         verticalAlignment: Text.AlignVCenter
         font.pixelSize: dispPixelSize 
+    }
+
+    Image {
+        id: netImg
+        source: 'net.svg'
+        height: parent.height * 0.8
+        width: parent.height * 0.8
+        anchors.left: swapData.right
+        anchors.leftMargin: 20
+        anchors.verticalCenter: parent.verticalCenter
+        verticalAlignment: Image.AlignVCenter
+        horizontalAlignment: Image.AlignLeft
+    }
+
+    Text {
+        id: netData
+        text: ''
+        height: parent.height
+        width: netwMetrics.width
+        color: theme.textColor
+        horizontalAlignment: Text.AlignLeft
+        anchors.left: netImg.right
+        anchors.leftMargin: 5
+        verticalAlignment: Text.AlignVCenter
+        font.pixelSize: dispPixelSize
+    }
+
+    // Supportive Functions
+    function convertNetworkSpeed(val) {
+        if (val >= 1048576) {
+            val /= 1048576
+        }
+        else if (val >= 1024) {
+            val /= 1024
+        }
+        else if (val < 1) {
+            val *= 1024
+        }
+
+        return val.toFixed(1)
+    }
+
+    function convertNetworkUnit(val) {
+        if (val >= 1048576) {
+            return 'GB/s'
+        }
+        else if (val >= 1024) {
+            return 'MB/s'
+        }
+        else if (val >= 1) {
+            return 'KB/s'
+        }
+        else {
+            return 'B/s'
+        }
     }
 }

@@ -12,7 +12,7 @@ case "$option" in
         kpackagetool5 -t Plasma/Applet --install ./
         ;;
     "test")
-        plasmoidviewer --applet ./
+        plasmawindowed org.kde.textresourcemonitor
         ;;
     *)
         echo "Invalid Option"
