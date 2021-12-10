@@ -35,7 +35,7 @@ Item {
 
     TextMetrics {
         id: netMetrics
-        text: " ↓ 00.00 MiB/s  ↑ 00.00 MiB/s "
+        text: " ↓ 00.0 MiB/s  ↑ 00.0 MiB/s"
         font.pixelSize: dispPixelSize
     }
 
